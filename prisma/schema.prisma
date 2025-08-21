@@ -1,15 +1,408 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// This is your complete database schema for the barbershop platform
+// Replace the entire contents of prisma/schema.prisma with this
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
+
+// Enums
+enum UserRole {
+  CUSTOMER
+  PROVIDER
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  WAITLISTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  DEPOSIT_PAID
+  REFUNDED
+  FAILED
+}
+
+enum BookingSource {
+  NATIVE
+  BOOKSY
+  PHONE
+  WALK_IN
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum SkillLevel {
+  BASIC
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+// Core Models
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  phone           String?
+  firstName       String
+  lastName        String
+  password        String?
+  role            UserRole  @default(CUSTOMER)
+  isActive        Boolean   @default(true)
+  emailVerified   DateTime?
+  verificationToken String?
+  
+  // Profile
+  avatar          String?
+  bio             String?
+  loyaltyPoints   Int       @default(0)
+  totalSpent      Float     @default(0)
+  preferences     Json?
+  
+  // Booksy Integration
+  booksyCustomerId String?
+  
+  // Audit
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  provider        Provider?
+  bookings        Booking[]
+  reviews         Review[]
+  
+  @@map("users")
+}
+
+model Location {
+  id              String    @id @default(cuid())
+  name            String
+  address         String
+  city            String
+  state           String
+  zipCode         String
+  country         String    @default("US")
+  phone           String
+  email           String
+  website         String?
+  
+  // Geographic
+  lat             Float?
+  lng             Float?
+  timezone        String    @default("America/New_York")
+  
+  // Business Hours
+  hours           Json
+  
+  // Settings
+  settings        Json?
+  isActive        Boolean   @default(true)
+  
+  // Booksy Integration
+  booksyLocationId String?
+  googlePlaceId   String?
+  
+  // Audit
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  providers       ProviderLocation[]
+  services        ServiceLocation[]
+  bookings        Booking[]
+  schedules       ProviderSchedule[]
+  slots           ScheduleSlot[]
+  
+  @@map("locations")
+}
+
+model Provider {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  locationId      String
+  
+  // Profile
+  title           String
+  bio             String?
+  specialties     String[]
+  yearsExperience Int       @default(0)
+  
+  // Business Settings
+  acceptsCash     Boolean   @default(true)
+  commissionRate  Float     @default(0.5)
+  bookingSettings Json?
+  
+  // Ratings
+  averageRating   Float     @default(0)
+  totalReviews    Int       @default(0)
+  
+  // Availability
+  isActive        Boolean   @default(true)
+  
+  // Booksy Integration
+  booksyProviderId String?
+  
+  // Audit
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relations
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locations       ProviderLocation[]
+  services        Service[]
+  bookings        Booking[]
+  schedules       ProviderSchedule[]
+  slots           ScheduleSlot[]
+  reviews         Review[]
+  
+  @@map("providers")
+}
+
+model ProviderLocation {
+  id          String    @id @default(cuid())
+  providerId  String
+  locationId  String
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  
+  provider    Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  
+  @@unique([providerId, locationId])
+  @@map("provider_locations")
+}
+
+model ServiceCategory {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  services    Service[]
+  
+  @@map("service_categories")
+}
+
+model Service {
+  id                  String        @id @default(cuid())
+  name                String
+  description         String?
+  categoryId          String
+  locationId          String
+  
+  // Pricing
+  price               Float
+  depositRequired     Boolean       @default(false)
+  depositAmount       Float?
+  
+  // Duration
+  duration            Int           // minutes
+  durationVariable    Boolean       @default(false)
+  
+  // Settings
+  isActive            Boolean       @default(true)
+  isPopular           Boolean       @default(false)
+  requiresConsultation Boolean      @default(false)
+  skillLevel          SkillLevel    @default(BASIC)
+  maxAdvanceBooking   Int?          // days
+  
+  // Booksy Integration
+  booksyServiceId     String?
+  
+  // Audit
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  // Relations
+  category            ServiceCategory @relation(fields: [categoryId], references: [id])
+  providers           Provider[]
+  locations           ServiceLocation[]
+  bookings            Booking[]
+  reviews             Review[]
+  
+  @@map("services")
+}
+
+model ServiceLocation {
+  id          String    @id @default(cuid())
+  serviceId   String
+  locationId  String
+  isActive    Boolean   @default(true)
+  price       Float?    // Location-specific pricing
+  createdAt   DateTime  @default(now())
+  
+  service     Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  
+  @@unique([serviceId, locationId])
+  @@map("service_locations")
+}
+
+model ProviderSchedule {
+  id          String    @id @default(cuid())
+  providerId  String
+  locationId  String
+  dayOfWeek   DayOfWeek
+  
+  // Time
+  startTime   String    // HH:MM format
+  endTime     String    // HH:MM format
+  
+  // Break Time
+  breakStart  String?   // HH:MM format
+  breakEnd    String?   // HH:MM format
+  
+  // Settings
+  isActive    Boolean   @default(true)
+  bufferTime  Int       @default(15) // minutes between appointments
+  
+  // Audit
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  provider    Provider  @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  location    Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  
+  @@unique([providerId, locationId, dayOfWeek])
+  @@map("provider_schedules")
+}
+
+model ScheduleSlot {
+  id          String      @id @default(cuid())
+  providerId  String
+  locationId  String
+  date        DateTime
+  startTime   String      // HH:MM format
+  endTime     String      // HH:MM format
+  isAvailable Boolean     @default(true)
+  isBreak     Boolean     @default(false)
+  reason      String?     // Sick, vacation, etc.
+  
+  // Audit
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relations
+  provider    Provider    @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  location    Location    @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  booking     Booking?
+  
+  @@unique([providerId, date, startTime])
+  @@map("schedule_slots")
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  customerId      String
+  providerId      String
+  serviceId       String
+  locationId      String
+  slotId          String?       @unique
+  
+  // Booking Details
+  bookingDate     DateTime
+  startTime       String        // HH:MM format
+  endTime         String        // HH:MM format
+  status          BookingStatus @default(PENDING)
+  
+  // Pricing
+  totalAmount     Float
+  depositAmount   Float?
+  finalAmount     Float?
+  
+  // Payment
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentMethod   String?
+  stripePaymentId String?
+  
+  // Details
+  notes           String?
+  cancellationReason String?
+  cancellationDate DateTime?
+  
+  // Source
+  bookingSource   BookingSource @default(NATIVE)
+  booksyBookingId String?
+  
+  // Group Booking
+  isGroupBooking  Boolean       @default(false)
+  groupSize       Int           @default(1)
+  parentBookingId String?
+  
+  // Waitlist
+  isWaitlist      Boolean       @default(false)
+  waitlistType    String?       // 'specific_time', 'time_range', 'any_time'
+  waitlistData    Json?
+  
+  // Audit
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  customer        User          @relation(fields: [customerId], references: [id])
+  provider        Provider      @relation(fields: [providerId], references: [id])
+  service         Service       @relation(fields: [serviceId], references: [id])
+  location        Location      @relation(fields: [locationId], references: [id])
+  slot            ScheduleSlot? @relation(fields: [slotId], references: [id])
+  parentBooking   Booking?      @relation("GroupBookings", fields: [parentBookingId], references: [id])
+  childBookings   Booking[]     @relation("GroupBookings")
+  
+  @@map("bookings")
+}
+
+model Review {
+  id          String    @id @default(cuid())
+  customerId  String
+  providerId  String
+  serviceId   String?
+  bookingId   String?
+  
+  // Review Content
+  rating      Int       // 1-5
+  comment     String?
+  
+  // Moderation
+  isPublic    Boolean   @default(true)
+  isApproved  Boolean   @default(false)
+  
+  // Response
+  response    String?
+  responseDate DateTime?
+  
+  // Audit
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  customer    User      @relation(fields: [customerId], references: [id])
+  provider    Provider  @relation(fields: [providerId], references: [id])
+  service     Service?  @relation(fields: [serviceId], references: [id])
+  
+  @@map("reviews")
+}
+
