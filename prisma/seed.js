@@ -1,4 +1,4 @@
-// prisma/seed.js
+// Fixed prisma/seed.js - Replace the provider schedule creation section
 require('dotenv').config({ path: '.env.local' })
 const { PrismaClient } = require('@prisma/client')
 const bcrypt = require('bcryptjs')
@@ -9,14 +9,18 @@ async function main() {
   console.log('🌱 Seeding database...')
 
   // Clear existing data
-  await prisma.booking.deleteMany()
   await prisma.review.deleteMany()
+  await prisma.booking.deleteMany()
   await prisma.scheduleSlot.deleteMany()
   await prisma.providerSchedule.deleteMany()
+  await prisma.providerLocation.deleteMany()
+  await prisma.serviceLocation.deleteMany()
   await prisma.service.deleteMany()
   await prisma.serviceCategory.deleteMany()
   await prisma.provider.deleteMany()
   await prisma.location.deleteMany()
+  await prisma.session.deleteMany()
+  await prisma.account.deleteMany()
   await prisma.user.deleteMany()
 
   // Create locations
@@ -240,7 +244,7 @@ async function main() {
   const alexProvider = await prisma.provider.create({
     data: {
       userId: alexUser.id,
-      locationId: location.id,
+      locationId: location.id,  // ADDED locationId
       title: 'Master Barber',
       bio: 'Specializing in classic cuts, modern fades, and traditional straight razor shaves with 8 years of experience.',
       specialties: ['Fades', 'Classic Cuts', 'Beard Styling', 'Straight Razor'],
@@ -270,7 +274,7 @@ async function main() {
   const jordanProvider = await prisma.provider.create({
     data: {
       userId: jordanUser.id,
-      locationId: location.id,
+      locationId: location.id,  // ADDED locationId
       title: 'Senior Stylist',
       bio: 'Expert in contemporary styles, precision cutting techniques, and professional hair coloring.',
       specialties: ['Modern Styles', 'Precision Cuts', 'Color', 'Creative Styling'],
@@ -297,7 +301,7 @@ async function main() {
     }
   })
 
-  // Create provider schedules (Monday-Saturday, 9 AM - 6 PM)
+  // Create provider schedules (FIXED - now includes locationId)
   const daysOfWeek = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY']
   
   for (const provider of [alexProvider, jordanProvider]) {
@@ -305,6 +309,7 @@ async function main() {
       await prisma.providerSchedule.create({
         data: {
           providerId: provider.id,
+          locationId: location.id,  // ADDED THIS LINE
           dayOfWeek,
           startTime: '09:00',
           endTime: '18:00',
